@@ -380,7 +380,8 @@ async function apiFetch(path, options = {}) {
     ...(token ? { "Authorization": `Bearer ${token}` } : {}),
     ...options.headers
   };
-  const res = await fetch(path, { ...options, headers });
+  const baseUrl = import.meta.env.VITE_API_GATEWAY_URL || "";
+  const res = await fetch(`${baseUrl}${path}`, { ...options, headers });
   if (res.status === 401) {
     localStorage.removeItem("token");
     if (!window.location.hash.includes("login")) window.location.reload();
