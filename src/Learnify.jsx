@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
+const API_BASE_URL = import.meta.env.VITE_API_GATEWAY_URL || "";
+
 //CSS Injection─────
 const STYLES = `
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;800;900&display=swap');
@@ -380,8 +382,7 @@ async function apiFetch(path, options = {}) {
     ...(token ? { "Authorization": `Bearer ${token}` } : {}),
     ...options.headers
   };
-  const baseUrl = import.meta.env.VITE_API_GATEWAY_URL || "";
-  const res = await fetch(`${baseUrl}${path}`, { ...options, headers });
+  const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
   if (res.status === 401) {
     localStorage.removeItem("token");
     if (!window.location.hash.includes("login")) window.location.reload();
@@ -713,6 +714,7 @@ function CatalogPage({ setPage, setSelectedCourse, courses, loading }) {
 function CourseDetailPage({ course, user, setPage, addToast, enrolled, onEnroll, enrollmentInfo }) {
   const [tab, setTab] = useState("curriculum");
   const [curriculum, setCurriculum] = useState([]);
+  const [reviews, setReviews] = useState([]);
   const [curLoading, setCurLoading] = useState(false);
 
   useEffect(() => {
@@ -722,6 +724,10 @@ function CourseDetailPage({ course, user, setPage, addToast, enrolled, onEnroll,
         .then(setCurriculum)
         .catch(err => console.error("Curriculum load failed", err))
         .finally(() => setCurLoading(false));
+      
+      apiFetch(`/api/reviews/api/reviews/course/${course.id}`)
+        .then(setReviews)
+        .catch(err => console.error("Reviews load failed", err));
     }
   }, [course]);
 
@@ -781,11 +787,14 @@ function CourseDetailPage({ course, user, setPage, addToast, enrolled, onEnroll,
           )}
           {tab === "reviews" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {["Great content!", "Really well structured.", "Best course I've taken!"].map((r, i) => (
+              {reviews.map((r, i) => (
                 <div key={i} className="clay-card" style={{ padding: 20 }}>
-                  <Stars n={5} /> <p style={{ marginTop: 8, fontWeight: 600, color: "#6B7280", fontSize: 14 }}>{r}</p>
+                  <Stars n={r.rating} /> 
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", marginBottom: 4 }}>by {r.userName || "Anonymous"}</div>
+                  <p style={{ marginTop: 8, fontWeight: 600, color: "#6B7280", fontSize: 14 }}>{r.comment}</p>
                 </div>
               ))}
+              {reviews.length === 0 && <div className="empty-state">No reviews yet. Be the first to review!</div>}
             </div>
           )}
         </div>
@@ -838,10 +847,18 @@ function LessonPlayerPage({ course, addToast }) {
 
   const lesson = curriculum[activeLesson];
 
-  const markDone = () => {
-    setDone(prev => ({ ...prev, [activeLesson]: true }));
-    addToast("Lesson marked complete! 🎯", "success");
-    if (activeLesson < curriculum.length - 1) setTimeout(() => setActiveLesson(activeLesson + 1), 600);
+  const markDone = async () => {
+    try {
+      await apiFetch("/api/tracking/api/tracking/progress", {
+        method: "POST",
+        body: JSON.stringify({ courseId: course.id, lessonId: lesson.id, status: 2 })
+      });
+      setDone(prev => ({ ...prev, [activeLesson]: true }));
+      addToast("Lesson marked complete! 🎯", "success");
+      if (activeLesson < curriculum.length - 1) setTimeout(() => setActiveLesson(activeLesson + 1), 600);
+    } catch (err) {
+      addToast("Failed to save progress", "error");
+    }
   };
 
   if (loading) return <div className="empty-state">Loading course player...</div>;
@@ -907,7 +924,7 @@ function LoginPage({ setPage, onLogin }) {
           <input className="clay-input" type="password" placeholder="••••••••" value={pass} onChange={e => setPass(e.target.value)} />
         </div>
         <button className="clay-btn" style={{ width: "100%", justifyContent: "center", marginBottom: 14 }} onClick={() => onLogin(email, pass)}>Sign In</button>
-        <button className="clay-btn outline" style={{ width: "100%", justifyContent: "center", marginBottom: 20 }} onClick={() => window.location.href = "/api/identity/api/accounts/external-login"}>
+        <button className="clay-btn outline" style={{ width: "100%", justifyContent: "center", marginBottom: 20 }} onClick={() => window.location.href = `${API_BASE_URL}/api/identity/api/accounts/external-login`}>
           🔵 Continue with Google
         </button>
         <div style={{ textAlign: "center", fontSize: 13, fontWeight: 700, color: "#9CA3AF" }}>
@@ -1114,11 +1131,13 @@ function InstructorDashboard({ user, addToast }) {
 function AdminPanel({ addToast }) {
   const [accounts, setAccounts] = useState([]);
   const [courses, setCourses] = useState([]);
+  const [stats, setStats] = useState(null);
   const [tab, setTab] = useState("pending");
 
   useEffect(() => {
     apiFetch("/api/identity/api/accounts/search?term=@").then(setAccounts).catch(console.error);
     apiFetch("/api/courses/api/courses/admin/all").then(setCourses).catch(console.error);
+    apiFetch("/api/analytics/api/analytics/platform-stats").then(setStats).catch(console.error);
   }, []);
 
   const approve = async (id) => {
@@ -1220,7 +1239,7 @@ function AdminPanel({ addToast }) {
       {tab === "analytics" && (
         <div>
           <div className="dash-grid" style={{ marginBottom: 24 }}>
-            {[{ icon: "👥", val: accounts.length, label: "Total Users" }, { icon: "📚", val: courses.length, label: "Total Courses" }, { icon: "📝", val: courses.reduce((a, b) => a + b.totalRegistrations, 0), label: "Enrollments" }, { icon: "⭐", val: 4.8, label: "Platform Rating" }].map((s, i) => (
+            {[{ icon: "👥", val: stats?.totalUsers || accounts.length, label: "Total Users" }, { icon: "📚", val: stats?.totalCourses || courses.length, label: "Total Courses" }, { icon: "📝", val: stats?.totalEnrollments || courses.reduce((a, b) => a + b.totalRegistrations, 0), label: "Enrollments" }, { icon: "💰", val: stats?.totalRevenue || 0, label: "Revenue ($)" }].map((s, i) => (
               <div key={i} className="clay-card stat-card"><div className="icon">{s.icon}</div><div className="val"><CountUp target={s.val} /></div><div className="label">{s.label}</div></div>
             ))}
           </div>
