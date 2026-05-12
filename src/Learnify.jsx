@@ -1450,6 +1450,14 @@ function InstructorDashboard({ user, addToast }) {
     } catch (err) { addToast(err.message, "error"); }
   };
 
+  const submitForReview = async (c) => {
+    try {
+      await apiFetch(`/api/courses/api/courses/${c.id}/submit-for-review`, { method: "POST" });
+      addToast(`"${c.title}" submitted for approval! ✓`, "success");
+      refreshCourses();
+    } catch (err) { addToast(err.message, "error"); }
+  };
+
   return (
     <div className="admin-wrap">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 28, flexWrap: "wrap", gap: 12 }}>
@@ -1475,11 +1483,24 @@ function InstructorDashboard({ user, addToast }) {
               {myCourses.map(c => (
                 <tr key={c.id}>
                   <td><div style={{ fontWeight: 800 }}>{c.title}</div><div style={{ fontSize: 12, color: "#9CA3AF" }}>{c.topic}</div></td>
-                  <td><span className="status-badge" style={{ background: c.isPublished ? "#D1FAE5" : "#FEF3C7", color: c.isPublished ? "#065F46" : "#92400E", border: c.isPublished ? "2px solid #34D399" : "2px solid #F59E0B" }}>{c.isPublished ? "Published" : "Draft"}</span></td>
+                  <td>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <span className="status-badge" style={{ 
+                        background: c.isApprovedByAdmin ? "#D1FAE5" : c.isPublished ? "#DBEAFE" : "#FEF3C7", 
+                        color: c.isApprovedByAdmin ? "#065F46" : c.isPublished ? "#1E40AF" : "#92400E", 
+                        border: c.isApprovedByAdmin ? "2px solid #34D399" : c.isPublished ? "2px solid #60A5FA" : "2px solid #F59E0B" 
+                      }}>
+                        {c.isApprovedByAdmin ? "Live" : c.isPublished ? "In Review" : "Draft"}
+                      </span>
+                    </div>
+                  </td>
                   <td>{c.totalRegistrations}</td>
                   <td><Stars n={c.averageRating} /></td>
                   <td>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {!c.isPublished && !c.isApprovedByAdmin && (
+                        <button className="clay-btn sm" style={{ background: "#10B981", borderColor: "#059669", boxShadow: "3px 3px 0 #059669" }} onClick={() => submitForReview(c)}>📤 Submit</button>
+                      )}
                       <button className="clay-btn sm outline" onClick={() => openEdit(c)}>✏️ Edit</button>
                       <button className="clay-btn sm" style={{ background: "#7C3AED", borderColor: "#5B21B6", boxShadow: "3px 3px 0 #5B21B6" }} onClick={() => { setExamCourse(c); setShowExamModal(true); }}>🧪 Exams</button>
                       <button className="clay-btn sm danger" onClick={() => deleteCourse(c)}>🗑️ Delete</button>
