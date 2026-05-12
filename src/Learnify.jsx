@@ -372,7 +372,28 @@ body { font-family: var(--font); background: #F5F0FF; }
 }
 .skeleton { background: linear-gradient(90deg,#EDE9FE 25%,#F5F3FF 50%,#EDE9FE 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 12px; }
 @keyframes shimmer { from{background-position:200% 0} to{background-position:-200% 0} }
+
+/* Exam/Quiz styles */
+.quiz-option {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; border-radius: 14px;
+  border: 2.5px solid #E0D7FF; background: rgba(255,255,255,0.9);
+  cursor: pointer; transition: all 0.15s; margin-bottom: 8px;
+  font-weight: 700; font-size: 14px; color: #2D1B69;
+}
+.quiz-option:hover { border-color: var(--purple); background: #EDE9FE; }
+.quiz-option.selected { border-color: var(--purple); background: #EDE9FE; }
+.quiz-option.correct { border-color: #10B981; background: #D1FAE5; color: #065F46; }
+.quiz-option.wrong { border-color: #EF4444; background: #FEE2E2; color: #991B1B; }
+.quiz-dot {
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+  border: 2.5px solid #A78BFA; display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 800;
+}
+.quiz-result-card { padding: 28px; text-align: center; }
+.exam-q-builder { background: #F9F7FF; border: 2px solid #EDE9FE; border-radius: 16px; padding: 16px; margin-bottom: 12px; }
 `;
+
 
 //API Wrapper ─
 async function apiFetch(path, options = {}) {
@@ -834,6 +855,9 @@ function LessonPlayerPage({ course, addToast }) {
   const [activeLesson, setActiveLesson] = useState(0);
   const [done, setDone] = useState({});
   const [loading, setLoading] = useState(false);
+  const [exams, setExams] = useState([]);
+  const [activeExam, setActiveExam] = useState(null);
+  const [activeTab, setActiveTab] = useState("lessons"); // "lessons" | "quizzes"
 
   useEffect(() => {
     if (course) {
@@ -842,6 +866,9 @@ function LessonPlayerPage({ course, addToast }) {
         .then(setCurriculum)
         .catch(console.error)
         .finally(() => setLoading(false));
+      apiFetch(`/api/exams/api/exams/course/${course.id}`)
+        .then(data => setExams(data.filter(e => e.isPublished)))
+        .catch(console.error);
     }
   }, [course]);
 
@@ -862,45 +889,99 @@ function LessonPlayerPage({ course, addToast }) {
   };
 
   if (loading) return <div className="empty-state">Loading course player...</div>;
-  if (!lesson) return <div className="empty-state">No lessons found.</div>;
+  if (!lesson && curriculum.length === 0) return <div className="empty-state">No lessons found.</div>;
 
   return (
     <div className="player-wrap">
       <div className="lesson-sidebar">
-        <div style={{ fontWeight: 900, fontSize: 16, color: "#2D1B69", marginBottom: 16 }}>📚 Curriculum</div>
-        {curriculum.map((l, i) => (
-          <div key={l.id} className={`lesson-row${activeLesson === i ? " active" : ""}`} onClick={() => setActiveLesson(i)} style={{ animationDelay: `${i * 0.06}s` }}>
+        <div style={{ fontWeight: 900, fontSize: 16, color: "#2D1B69", marginBottom: 12 }}>📚 Curriculum</div>
+        {/* Tab switcher */}
+        <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
+          {["lessons", "quizzes"].map(t => (
+            <div key={t} onClick={() => setActiveTab(t)} style={{ flex: 1, textAlign: "center", padding: "6px 8px", borderRadius: 10, cursor: "pointer", fontWeight: 700, fontSize: 12, background: activeTab === t ? "var(--purple)" : "rgba(255,255,255,0.7)", color: activeTab === t ? "white" : "#7C3AED", border: `2px solid ${activeTab === t ? "var(--purple-dark)" : "#E0D7FF"}`, transition: "all 0.15s" }}>
+              {t === "lessons" ? "📖 Lessons" : `🧪 Quizzes${exams.length > 0 ? ` (${exams.length})` : ""}`}
+            </div>
+          ))}
+        </div>
+
+        {activeTab === "lessons" && curriculum.map((l, i) => (
+          <div key={l.id} className={`lesson-row${activeLesson === i ? " active" : ""}`} onClick={() => { setActiveLesson(i); setActiveTab("lessons"); }} style={{ animationDelay: `${i * 0.06}s` }}>
             <div className={`lesson-check${done[i] ? " done" : ""}`}>{done[i] ? "✓" : i + 1}</div>
             <div style={{ flex: 1, lineHeight: 1.3 }}>
               <div>{l.title}</div>
-              <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{l.durationMinutes}m</div>
+              <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{l.durationMinutes}m · {l.format}</div>
             </div>
           </div>
         ))}
+
+        {activeTab === "quizzes" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {exams.length === 0 ? (
+              <div style={{ color: "#9CA3AF", fontSize: 13, fontWeight: 600, padding: 8 }}>No quizzes available yet.</div>
+            ) : exams.map(exam => (
+              <div key={exam.id} className="clay-card" onClick={() => setActiveExam(exam)} style={{ padding: "10px 14px", cursor: "pointer", transition: "transform 0.15s", border: "2px solid #EDE9FE" }}>
+                <div style={{ fontWeight: 800, fontSize: 13, color: "#2D1B69" }}>🧪 {exam.title}</div>
+                <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, marginTop: 2 }}>Pass: {exam.passThreshold}% · {exam.attemptsAllowed} attempts</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
       <div className="player-main">
-        <div className="clay-card video-container" style={{ background: course?.gradient || "linear-gradient(135deg,#A78BFA,#7C3AED)" }}>
-          <span style={{ fontSize: 80 }}>{lesson.format === "video" ? "▶" : lesson.format === "article" ? "📄" : "✏️"}</span>
-        </div>
-        <div style={{ maxWidth: 720 }}>
-          <div style={{ display: "flex", gap: 10, marginBottom: 10, alignItems: "center" }}>
-            <Badge topic={course?.topic || "Programming"} />
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#9CA3AF" }}>Lesson {activeLesson + 1} of {curriculum.length}</span>
-          </div>
-          <h2 style={{ fontSize: 24, fontWeight: 900, color: "#2D1B69", marginBottom: 8 }}>{lesson.title}</h2>
-          <p style={{ fontSize: 15, fontWeight: 600, color: "#9CA3AF", marginBottom: 24, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{lesson.body || `This lesson covers ${lesson.title.toLowerCase()}. Follow along and take notes to get the most out of this ${lesson.durationMinutes}m ${lesson.format}.`}</p>
-          <div style={{ display: "flex", gap: 12 }}>
-            {activeLesson > 0 && <button className="clay-btn outline" onClick={() => setActiveLesson(activeLesson - 1)}>← Previous</button>}
-            {!done[activeLesson] && <button className="clay-btn success" onClick={markDone}>✓ Mark Complete</button>}
-            {activeLesson < curriculum.length - 1 && <button className="clay-btn" onClick={() => setActiveLesson(activeLesson + 1)}>Next →</button>}
-          </div>
-          {done[activeLesson] && (
-            <div style={{ marginTop: 16, padding: "12px 20px", background: "#D1FAE5", border: "2.5px solid #34D399", borderRadius: 14, color: "#065F46", fontWeight: 700, fontSize: 14, display: "inline-block" }}>
-              ✅ Lesson completed!
+        {activeTab === "lessons" && lesson && (
+          <>
+            <div className="clay-card video-container" style={{ background: course?.gradient || "linear-gradient(135deg,#A78BFA,#7C3AED)" }}>
+              <span style={{ fontSize: 80 }}>{lesson.format === "video" ? "▶" : lesson.format === "article" ? "📄" : "✏️"}</span>
             </div>
-          )}
-        </div>
+            <div style={{ maxWidth: 720 }}>
+              <div style={{ display: "flex", gap: 10, marginBottom: 10, alignItems: "center" }}>
+                <Badge topic={course?.topic || "Programming"} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: "#9CA3AF" }}>Lesson {activeLesson + 1} of {curriculum.length}</span>
+              </div>
+              <h2 style={{ fontSize: 24, fontWeight: 900, color: "#2D1B69", marginBottom: 8 }}>{lesson.title}</h2>
+              <p style={{ fontSize: 15, fontWeight: 600, color: "#9CA3AF", marginBottom: 24, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{lesson.body || `This lesson covers ${lesson.title.toLowerCase()}. Follow along and take notes to get the most out of this ${lesson.durationMinutes}m ${lesson.format}.`}</p>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                {activeLesson > 0 && <button className="clay-btn outline" onClick={() => setActiveLesson(activeLesson - 1)}>← Previous</button>}
+                {!done[activeLesson] && <button className="clay-btn success" onClick={markDone}>✓ Mark Complete</button>}
+                {activeLesson < curriculum.length - 1 && <button className="clay-btn" onClick={() => setActiveLesson(activeLesson + 1)}>Next →</button>}
+                {exams.length > 0 && <button className="clay-btn outline" style={{ borderColor: "#7C3AED", color: "#7C3AED" }} onClick={() => setActiveTab("quizzes")}>🧪 View Quizzes</button>}
+              </div>
+              {done[activeLesson] && (
+                <div style={{ marginTop: 16, padding: "12px 20px", background: "#D1FAE5", border: "2.5px solid #34D399", borderRadius: 14, color: "#065F46", fontWeight: 700, fontSize: 14, display: "inline-block" }}>
+                  ✅ Lesson completed!
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {activeTab === "quizzes" && (
+          <div style={{ maxWidth: 700 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 900, color: "#2D1B69", marginBottom: 8 }}>🧪 Course Quizzes</h2>
+            <p style={{ fontSize: 14, color: "#9CA3AF", fontWeight: 600, marginBottom: 24 }}>Test your knowledge with these assessments. Select a quiz to begin.</p>
+            {exams.length === 0 ? (
+              <div className="empty-state"><div className="emoji">📝</div><p>No quizzes available for this course yet.</p></div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {exams.map(exam => (
+                  <div key={exam.id} className="clay-card" style={{ padding: 24, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 900, color: "#2D1B69", fontSize: 18, marginBottom: 4 }}>🧪 {exam.title}</div>
+                      <div style={{ fontSize: 13, color: "#9CA3AF", fontWeight: 600 }}>Pass score: {exam.passThreshold}% · Max {exam.attemptsAllowed} attempts</div>
+                    </div>
+                    <button className="clay-btn" onClick={() => setActiveExam(exam)}>Start Quiz →</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {activeExam && (
+        <ExamTakerModal exam={activeExam} onClose={() => setActiveExam(null)} addToast={addToast} />
+      )}
     </div>
   );
 }
@@ -1019,36 +1100,353 @@ function LearnerDashboard({ user, setPage, setSelectedCourse, enrollments }) {
   );
 }
 
+// Exam Manager — Instructor creates/views exams for a course
+function ExamManagerModal({ course, onClose, addToast }) {
+  const [exams, setExams] = useState([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [examForm, setExamForm] = useState({ title: "", passThreshold: 70, attemptsAllowed: 3 });
+  const [questions, setQuestions] = useState([]);
+  const [expandedExam, setExpandedExam] = useState(null);
+  const [attempts, setAttempts] = useState({});
+
+  const refreshExams = () =>
+    apiFetch(`/api/exams/api/exams/course/${course.id}`)
+      .then(setExams).catch(e => addToast(e.message, "error"));
+
+  useEffect(() => { refreshExams(); }, []);
+
+  const addQuestion = () =>
+    setQuestions(p => [...p, { Id: p.length + 1, Text: "", Options: ["", "", "", ""], CorrectOption: 0 }]);
+
+  const updateQ = (i, field, val) =>
+    setQuestions(p => p.map((q, idx) => idx === i ? { ...q, [field]: val } : q));
+
+  const updateOpt = (qi, oi, val) =>
+    setQuestions(p => p.map((q, idx) => idx === qi ? { ...q, Options: q.Options.map((o, j) => j === oi ? val : o) } : q));
+
+  const createExam = async () => {
+    if (!examForm.title) { addToast("Quiz title required", "error"); return; }
+    if (questions.length === 0) { addToast("Add at least one question", "error"); return; }
+    try {
+      const exam = await apiFetch("/api/exams/api/exams", {
+        method: "POST",
+        body: JSON.stringify({ courseId: course.id, title: examForm.title, passThreshold: examForm.passThreshold, attemptsAllowed: examForm.attemptsAllowed, questionsJson: JSON.stringify(questions) })
+      });
+      await apiFetch(`/api/exams/api/exams/${exam.id}/publish`, { method: "POST" });
+      addToast(`Quiz "${examForm.title}" published! 🎉`, "success");
+      setShowCreate(false);
+      setExamForm({ title: "", passThreshold: 70, attemptsAllowed: 3 });
+      setQuestions([]);
+      refreshExams();
+    } catch (err) { addToast(err.message, "error"); }
+  };
+
+  const deleteExam = async (examId) => {
+    if (!window.confirm("Delete this exam? All attempts will be lost.")) return;
+    try {
+      await apiFetch(`/api/exams/api/exams/${examId}`, { method: "DELETE" });
+      addToast("Exam deleted", "success");
+      refreshExams();
+    } catch (err) { addToast(err.message, "error"); }
+  };
+
+  const loadAttempts = async (examId) => {
+    if (expandedExam === examId) { setExpandedExam(null); return; }
+    try {
+      const data = await apiFetch(`/api/exams/api/exams/${examId}/all-attempts`);
+      setAttempts(p => ({ ...p, [examId]: data }));
+      setExpandedExam(examId);
+    } catch (err) { addToast("Could not load attempts", "error"); }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="clay-card modal-card" style={{ maxWidth: 700, maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div style={{ fontWeight: 900, fontSize: 18, color: "#2D1B69" }}>🧪 Exams — {course.title}</div>
+          <button className="clay-btn sm outline" onClick={onClose}>✕ Close</button>
+        </div>
+        {!showCreate ? (
+          <>
+            <button className="clay-btn sm" style={{ marginBottom: 16 }} onClick={() => setShowCreate(true)}>+ Create Quiz</button>
+            {exams.length === 0 ? (
+              <div className="empty-state"><div className="emoji">📝</div><p>No quizzes yet. Create your first assessment!</p></div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {exams.map(exam => (
+                  <div key={exam.id} className="clay-card" style={{ padding: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                      <div>
+                        <div style={{ fontWeight: 800, color: "#2D1B69" }}>{exam.title}</div>
+                        <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600 }}>
+                          Pass: {exam.passThreshold}% · Max Attempts: {exam.attemptsAllowed} ·{" "}
+                          <span style={{ color: exam.isPublished ? "#10B981" : "#F59E0B" }}>{exam.isPublished ? "✓ Published" : "Draft"}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button className="clay-btn sm outline" onClick={() => loadAttempts(exam.id)}>{expandedExam === exam.id ? "Hide" : "👁 Attempts"}</button>
+                        <button className="clay-btn sm danger" onClick={() => deleteExam(exam.id)}>Delete</button>
+                      </div>
+                    </div>
+                    {expandedExam === exam.id && attempts[exam.id] && (
+                      <div style={{ marginTop: 12, borderTop: "2px solid #EDE9FE", paddingTop: 12 }}>
+                        {attempts[exam.id].length === 0 ? (
+                          <div style={{ color: "#9CA3AF", fontSize: 13, fontWeight: 600 }}>No attempts yet.</div>
+                        ) : (
+                          <table className="clay-table" style={{ fontSize: 12 }}>
+                            <thead><tr><th>Learner</th><th>Score</th><th>Passed</th><th>Date</th></tr></thead>
+                            <tbody>
+                              {attempts[exam.id].map(a => (
+                                <tr key={a.id}>
+                                  <td>#{a.learnerId}</td>
+                                  <td style={{ fontWeight: 800, color: a.hasPassed ? "#10B981" : "#EF4444" }}>{a.score}%</td>
+                                  <td>{a.hasPassed ? "✅" : "❌"}</td>
+                                  <td>{a.submittedAt ? new Date(a.submittedAt).toLocaleDateString() : "In Progress"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <div>
+            <div style={{ fontWeight: 800, color: "#2D1B69", fontSize: 16, marginBottom: 16 }}>📝 New Quiz</div>
+            <div className="form-group"><label className="form-label">Quiz Title</label><input className="clay-input" placeholder="e.g. Module 1 Assessment" value={examForm.title} onChange={e => setExamForm({ ...examForm, title: e.target.value })} /></div>
+            <div style={{ display: "flex", gap: 12 }}>
+              <div className="form-group" style={{ flex: 1 }}><label className="form-label">Pass Score (%)</label><input className="clay-input" type="number" min="0" max="100" value={examForm.passThreshold} onChange={e => setExamForm({ ...examForm, passThreshold: parseInt(e.target.value) })} /></div>
+              <div className="form-group" style={{ flex: 1 }}><label className="form-label">Max Attempts</label><input className="clay-input" type="number" min="1" max="10" value={examForm.attemptsAllowed} onChange={e => setExamForm({ ...examForm, attemptsAllowed: parseInt(e.target.value) })} /></div>
+            </div>
+            <div style={{ fontWeight: 800, color: "#2D1B69", marginBottom: 8 }}>Questions</div>
+            {questions.map((q, qi) => (
+              <div key={qi} className="exam-q-builder">
+                <div style={{ fontWeight: 700, color: "#7C3AED", marginBottom: 8, fontSize: 13 }}>Question {qi + 1}</div>
+                <input className="clay-input" placeholder="Question text..." value={q.Text} onChange={e => updateQ(qi, "Text", e.target.value)} style={{ marginBottom: 10 }} />
+                {q.Options.map((opt, oi) => (
+                  <div key={oi} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center" }}>
+                    <div onClick={() => updateQ(qi, "CorrectOption", oi)} style={{ width: 22, height: 22, borderRadius: "50%", border: `2.5px solid ${q.CorrectOption === oi ? "#10B981" : "#D1D5DB"}`, background: q.CorrectOption === oi ? "#10B981" : "white", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 10, fontWeight: 800 }}>
+                      {q.CorrectOption === oi && "✓"}
+                    </div>
+                    <input className="clay-input" placeholder={`Option ${oi + 1}`} value={opt} onChange={e => updateOpt(qi, oi, e.target.value)} style={{ flex: 1 }} />
+                  </div>
+                ))}
+                <div style={{ fontSize: 11, color: "#10B981", fontWeight: 700 }}>Click ○ to mark correct answer</div>
+              </div>
+            ))}
+            <button className="clay-btn sm outline" onClick={addQuestion} style={{ marginBottom: 16 }}>+ Add Question</button>
+            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+              <button className="clay-btn outline" onClick={() => setShowCreate(false)}>Cancel</button>
+              <button className="clay-btn success" onClick={createExam}>Publish Quiz 🚀</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Exam Taker — Learner takes a quiz
+function ExamTakerModal({ exam, onClose, addToast }) {
+  const [attempt, setAttempt] = useState(null);
+  const [answers, setAnswers] = useState({});
+  const [result, setResult] = useState(null);
+  const [pastAttempts, setPastAttempts] = useState([]);
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    try { setQuestions(JSON.parse(exam.questionsPayload || "[]")); } catch { setQuestions([]); }
+    apiFetch(`/api/exams/api/exams/${exam.id}/my-attempts`)
+      .then(setPastAttempts).catch(console.error);
+  }, [exam]);
+
+  const bestAttempt = pastAttempts.length > 0
+    ? pastAttempts.reduce((best, a) => (a.score > best.score ? a : best), pastAttempts[0])
+    : null;
+
+  const startAttempt = async () => {
+    setLoading(true);
+    try {
+      const a = await apiFetch(`/api/exams/api/exams/${exam.id}/attempts`, { method: "POST" });
+      setAttempt(a); setAnswers({}); setResult(null);
+    } catch (err) { addToast(err.message, "error"); }
+    finally { setLoading(false); }
+  };
+
+  const submitAttempt = async () => {
+    if (Object.keys(answers).length < questions.length) {
+      addToast("Please answer all questions before submitting", "error"); return;
+    }
+    setLoading(true);
+    try {
+      const answersJson = JSON.stringify(Object.fromEntries(
+        Object.entries(answers).map(([k, v]) => [k, v])
+      ));
+      const res = await apiFetch(`/api/exams/api/exams/attempts/${attempt.id}/submit`, {
+        method: "POST", body: JSON.stringify({ answersJson })
+      });
+      setResult(res);
+      setAttempt(null);
+      addToast(res.hasPassed ? "🎉 Passed! Great job!" : "Quiz submitted. Keep practicing!", res.hasPassed ? "success" : "info");
+      
+      // Trigger certificate issuance if passed and course is potentially complete
+      if (res.hasPassed) {
+        try {
+          // Find the registration for this course
+          const regs = await apiFetch("/api/registration/api/registrations/learner/me"); // Note: we'd need a helper or just check the list
+          const reg = regs.find(r => r.courseId === exam.courseId);
+          if (reg && reg.completionPercent >= 100 && !reg.credentialIssued) {
+            await apiFetch(`/api/registration/api/registrations/${reg.id}/complete`, { method: "POST" });
+            addToast("🎓 Certificate Issued! Check your profile.", "success");
+          }
+        } catch (e) { console.error("Auto-issue failed", e); }
+      }
+
+      apiFetch(`/api/exams/api/exams/${exam.id}/my-attempts`).then(setPastAttempts);
+    } catch (err) { addToast(err.message, "error"); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="clay-card modal-card" style={{ maxWidth: 600, maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div style={{ fontWeight: 900, fontSize: 18, color: "#2D1B69" }}>🧪 {exam.title}</div>
+          <button className="clay-btn sm outline" onClick={onClose}>✕ Close</button>
+        </div>
+
+        {/* Result screen */}
+        {result && (
+          <div className="quiz-result-card">
+            <div style={{ fontSize: 64, marginBottom: 12 }}>{result.hasPassed ? "🏆" : "📚"}</div>
+            <div style={{ fontSize: 32, fontWeight: 900, color: result.hasPassed ? "#10B981" : "#EF4444" }}>{result.score}%</div>
+            <div style={{ fontWeight: 800, fontSize: 18, color: "#2D1B69", marginBottom: 8 }}>{result.hasPassed ? "You Passed!" : "Not Passed"}</div>
+            <div style={{ fontSize: 13, color: "#9CA3AF", fontWeight: 600, marginBottom: 20 }}>Pass threshold: {exam.passThreshold}% · Your score: {result.score}%</div>
+            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+              {!result.hasPassed && pastAttempts.length < exam.attemptsAllowed && (
+                <button className="clay-btn" onClick={startAttempt}>Retake Quiz ↺</button>
+              )}
+              <button className="clay-btn outline" onClick={onClose}>Close</button>
+            </div>
+          </div>
+        )}
+
+        {/* Pre-start screen */}
+        {!attempt && !result && (
+          <div>
+            <div style={{ padding: "16px 20px", background: "#EDE9FE", borderRadius: 14, marginBottom: 20 }}>
+              <div style={{ fontWeight: 800, color: "#5B21B6", marginBottom: 4 }}>📋 Quiz Info</div>
+              <div style={{ fontSize: 13, color: "#6B7280", fontWeight: 600, lineHeight: 1.6 }}>
+                • {questions.length} questions<br />
+                • Pass score: {exam.passThreshold}%<br />
+                • Attempts allowed: {exam.attemptsAllowed}<br />
+                • Attempts used: {pastAttempts.length}
+              </div>
+            </div>
+            {bestAttempt && (
+              <div style={{ padding: "12px 16px", background: bestAttempt.hasPassed ? "#D1FAE5" : "#FEF3C7", border: `2px solid ${bestAttempt.hasPassed ? "#34D399" : "#F59E0B"}`, borderRadius: 12, marginBottom: 16, fontWeight: 700, fontSize: 13 }}>
+                Best attempt: {bestAttempt.score}% {bestAttempt.hasPassed ? "✅ Passed" : "❌ Not passed"}
+              </div>
+            )}
+            {pastAttempts.length >= exam.attemptsAllowed ? (
+              <div style={{ padding: "16px", background: "#FEE2E2", border: "2px solid #FCA5A5", borderRadius: 14, color: "#991B1B", fontWeight: 700, textAlign: "center" }}>
+                No attempts remaining. {bestAttempt?.hasPassed ? "You've passed this quiz! 🎉" : "Contact your instructor for more attempts."}
+              </div>
+            ) : (
+              <button className="clay-btn" style={{ width: "100%", justifyContent: "center" }} onClick={startAttempt} disabled={loading}>
+                {loading ? "Starting..." : "Start Quiz →"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Active quiz */}
+        {attempt && !result && (
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#9CA3AF", marginBottom: 16 }}>Answer all {questions.length} questions</div>
+            {questions.map((q, qi) => (
+              <div key={q.Id} style={{ marginBottom: 24 }}>
+                <div style={{ fontWeight: 800, color: "#2D1B69", marginBottom: 12, fontSize: 15 }}>{qi + 1}. {q.Text}</div>
+                {(q.Options || []).map((opt, oi) => (
+                  <div key={oi} className={`quiz-option${answers[q.Id.toString()] === oi ? " selected" : ""}`} onClick={() => setAnswers(p => ({ ...p, [q.Id.toString()]: oi }))}>
+                    <div className="quiz-dot" style={{ borderColor: answers[q.Id.toString()] === oi ? "var(--purple)" : "#A78BFA", background: answers[q.Id.toString()] === oi ? "var(--purple)" : "transparent", color: answers[q.Id.toString()] === oi ? "white" : "transparent" }}>
+                      {answers[q.Id.toString()] === oi ? "✓" : ""}
+                    </div>
+                    {opt}
+                  </div>
+                ))}
+              </div>
+            ))}
+            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+              <button className="clay-btn outline" onClick={onClose}>Save & Exit</button>
+              <button className="clay-btn success" onClick={submitAttempt} disabled={loading}>{loading ? "Submitting..." : "Submit Quiz ✓"}</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 //Instructor Dashboard
 function InstructorDashboard({ user, addToast }) {
   const [showModal, setShowModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showExamModal, setShowExamModal] = useState(false);
+  const [editingCourse, setEditingCourse] = useState(null);
+  const [examCourse, setExamCourse] = useState(null);
   const [form, setForm] = useState({ title: "", synopsis: "", topic: "Programming", difficulty: 0, price: "" });
+  const [editForm, setEditForm] = useState({ title: "", synopsis: "", topic: "Programming", difficulty: 0, price: "" });
   const [myCourses, setMyCourses] = useState([]);
 
-  useEffect(() => {
-    apiFetch("/api/courses/api/courses/my-courses")
-      .then(setMyCourses)
-      .catch(console.error);
-  }, []);
+  const refreshCourses = () =>
+    apiFetch("/api/courses/api/courses/my-courses").then(setMyCourses).catch(console.error);
+
+  useEffect(() => { refreshCourses(); }, []);
 
   const create = async () => {
     if (!form.title) { addToast("Title is required", "error"); return; }
     try {
       await apiFetch("/api/courses/api/courses", {
         method: "POST",
-        body: JSON.stringify({
-          title: form.title,
-          synopsis: form.synopsis,
-          topic: form.topic,
-          difficulty: parseInt(form.difficulty),
-          listPrice: parseFloat(form.price) || 0
-        })
+        body: JSON.stringify({ title: form.title, synopsis: form.synopsis, topic: form.topic, difficulty: parseInt(form.difficulty), listPrice: parseFloat(form.price) || 0 })
       });
       addToast(`Course "${form.title}" created!`, "success");
       setShowModal(false);
       setForm({ title: "", synopsis: "", topic: "Programming", difficulty: 0, price: "" });
-      // Refresh
-      apiFetch("/api/courses/api/courses/my-courses").then(setMyCourses);
+      refreshCourses();
+    } catch (err) { addToast(err.message, "error"); }
+  };
+
+  const openEdit = (c) => {
+    setEditingCourse(c);
+    setEditForm({ title: c.title, synopsis: c.synopsis || "", topic: c.topic, difficulty: typeof c.difficulty === "number" ? c.difficulty : 0, price: c.listPrice });
+    setShowEditModal(true);
+  };
+
+  const saveEdit = async () => {
+    try {
+      await apiFetch(`/api/courses/api/courses/${editingCourse.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ title: editForm.title, synopsis: editForm.synopsis, topic: editForm.topic, difficulty: parseInt(editForm.difficulty), listPrice: parseFloat(editForm.price) || 0 })
+      });
+      addToast("Course updated! ✓", "success");
+      setShowEditModal(false);
+      refreshCourses();
+    } catch (err) { addToast(err.message, "error"); }
+  };
+
+  const deleteCourse = async (c) => {
+    if (!window.confirm(`Delete "${c.title}"? This cannot be undone.`)) return;
+    try {
+      await apiFetch(`/api/courses/api/courses/${c.id}`, { method: "DELETE" });
+      addToast(`"${c.title}" deleted.`, "success");
+      refreshCourses();
     } catch (err) { addToast(err.message, "error"); }
   };
 
@@ -1057,7 +1455,7 @@ function InstructorDashboard({ user, addToast }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 28, flexWrap: "wrap", gap: 12 }}>
         <div>
           <div style={{ fontWeight: 900, fontSize: 26, color: "#2D1B69" }}>Instructor Studio 🏫</div>
-          <div style={{ fontWeight: 600, color: "#9CA3AF", fontSize: 14 }}>Manage your courses and students</div>
+          <div style={{ fontWeight: 600, color: "#9CA3AF", fontSize: 14 }}>Manage your courses, assessments and students</div>
         </div>
         <button className="clay-btn" onClick={() => setShowModal(true)}>+ Create Course</button>
       </div>
@@ -1081,18 +1479,21 @@ function InstructorDashboard({ user, addToast }) {
                   <td>{c.totalRegistrations}</td>
                   <td><Stars n={c.averageRating} /></td>
                   <td>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button className="clay-btn sm outline" onClick={() => addToast("Edit logic connected to backend soon!", "info")}>Edit</button>
-                      <button className="clay-btn sm danger" onClick={() => addToast("Delete logic connected to backend soon!", "error")}>Delete</button>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <button className="clay-btn sm outline" onClick={() => openEdit(c)}>✏️ Edit</button>
+                      <button className="clay-btn sm" style={{ background: "#7C3AED", borderColor: "#5B21B6", boxShadow: "3px 3px 0 #5B21B6" }} onClick={() => { setExamCourse(c); setShowExamModal(true); }}>🧪 Exams</button>
+                      <button className="clay-btn sm danger" onClick={() => deleteCourse(c)}>🗑️ Delete</button>
                     </div>
                   </td>
                 </tr>
               ))}
+              {myCourses.length === 0 && <tr><td colSpan={5}><div className="empty-state">No courses yet. Create your first!</div></td></tr>}
             </tbody>
           </table>
         </div>
       </div>
 
+      {/* Create Modal */}
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div className="clay-card modal-card">
@@ -1123,6 +1524,43 @@ function InstructorDashboard({ user, addToast }) {
           </div>
         </div>
       )}
+
+      {/* Edit Modal */}
+      {showEditModal && editingCourse && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowEditModal(false)}>
+          <div className="clay-card modal-card">
+            <div style={{ fontWeight: 900, fontSize: 22, color: "#2D1B69", marginBottom: 20 }}>Edit Course ✏️</div>
+            <div className="form-group"><label className="form-label">Title</label><input className="clay-input" value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} /></div>
+            <div className="form-group"><label className="form-label">Synopsis</label><textarea className="textarea-clay" value={editForm.synopsis} onChange={e => setEditForm({ ...editForm, synopsis: e.target.value })} /></div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <div className="form-group" style={{ flex: 1, minWidth: 160 }}>
+                <label className="form-label">Topic</label>
+                <select className="select-clay" value={editForm.topic} onChange={e => setEditForm({ ...editForm, topic: e.target.value })}>
+                  {TOPICS.map(t => <option key={t.name}>{t.name}</option>)}
+                </select>
+              </div>
+              <div className="form-group" style={{ flex: 1, minWidth: 160 }}>
+                <label className="form-label">Difficulty</label>
+                <div className="role-pills">
+                  {["Beg.", "Int.", "Adv."].map((d, i) => (
+                    <div key={i} className={`role-pill${editForm.difficulty === i ? " active" : ""}`} style={{ fontSize: 12, padding: "8px 6px" }} onClick={() => setEditForm({ ...editForm, difficulty: i })}>{d}</div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="form-group"><label className="form-label">Price ($)</label><input className="clay-input" type="number" value={editForm.price} onChange={e => setEditForm({ ...editForm, price: e.target.value })} /></div>
+            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 8 }}>
+              <button className="clay-btn outline" onClick={() => setShowEditModal(false)}>Cancel</button>
+              <button className="clay-btn" onClick={saveEdit}>Save Changes ✓</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Exam Manager Modal */}
+      {showExamModal && examCourse && (
+        <ExamManagerModal course={examCourse} onClose={() => setShowExamModal(false)} addToast={addToast} />
+      )}
     </div>
   );
 }
@@ -1151,6 +1589,24 @@ function AdminPanel({ addToast }) {
     try {
       await apiFetch(`/api/courses/api/courses/${id}/reject`, { method: "POST" });
       addToast("Course rejected", "error");
+      apiFetch("/api/courses/api/courses/admin/all").then(setCourses);
+    } catch (err) { addToast(err.message, "error"); }
+  };
+
+  const toggleUserStatus = async (user) => {
+    const action = user.isActive ? "suspend" : "reactivate";
+    try {
+      await apiFetch(`/api/identity/api/accounts/${user.id}/${action}`, { method: "POST" });
+      addToast(`User ${user.displayName} ${user.isActive ? "suspended" : "reactivated"}`, "success");
+      apiFetch("/api/identity/api/accounts/search?term=@").then(setAccounts);
+    } catch (err) { addToast(err.message, "error"); }
+  };
+
+  const deleteCourseAdmin = async (course) => {
+    if (!window.confirm(`Permanently delete "${course.title}"?`)) return;
+    try {
+      await apiFetch(`/api/courses/api/courses/${course.id}`, { method: "DELETE" });
+      addToast("Course deleted", "success");
       apiFetch("/api/courses/api/courses/admin/all").then(setCourses);
     } catch (err) { addToast(err.message, "error"); }
   };
@@ -1204,7 +1660,7 @@ function AdminPanel({ addToast }) {
                     <td>{a.email}</td>
                     <td>{a.role}</td>
                     <td><span className="status-badge" style={{ background: a.isActive ? "#D1FAE5" : "#FEE2E2", color: a.isActive ? "#065F46" : "#991B1B" }}>{a.isActive ? "Active" : "Suspended"}</span></td>
-                    <td><button className="clay-btn sm danger" onClick={() => addToast("Suspend logic soon", "error")}>Suspend</button></td>
+                    <td><button className={`clay-btn sm ${a.isActive ? "danger" : "success"}`} onClick={() => toggleUserStatus(a)}>{a.isActive ? "Suspend" : "Reactivate"}</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -1227,7 +1683,7 @@ function AdminPanel({ addToast }) {
                     <td>${c.listPrice}</td>
                     <td>{c.totalRegistrations}</td>
                     <td><Stars n={c.averageRating} /></td>
-                    <td><button className="clay-btn sm danger" onClick={() => addToast("Delete logic soon", "error")}>Delete</button></td>
+                    <td><button className="clay-btn sm danger" onClick={() => deleteCourseAdmin(c)}>Delete</button></td>
                   </tr>
                 ))}
               </tbody>
